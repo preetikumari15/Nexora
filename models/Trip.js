@@ -16,5 +16,4 @@ const TripSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.models.Trip ||
-  mongoose.model("Trip", TripSchema);
+export default mongoose.models.Trip || mongoose.model("Trip", TripSchema);
