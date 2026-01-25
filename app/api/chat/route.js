@@ -1,66 +1,66 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 
 export async function POST(req) {
-  let payload;
-
   try {
-    payload = await req.json();
-    const { question, context } = payload;
+    const { question, context } = await req.json();
 
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
-  const systemPrompt = `
-You are a smart travel assistant for a route-based hotel finder.
-
-Journey:
-${context.start} → ${context.end}
+    const systemPrompt = `
+You are a travel assistant.
+Journey: ${context.start} → ${context.end}
 Distance: ${context.distance} km
-Time: ${context.time} hours
+Time: ${context.time} hrs
 
 Hotels on route:
 ${context.hotels
-  .slice(0, 20)
-  .map(
-    (h, i) =>
-      `${i + 1}. ${h.name}, ₹${h.price}, rating ${h.rating || "N/A"}`
-  )
+  .map((h) => `- ${h.name} (₹${h.price || "N/A"})`)
   .join("\n")}
 
-Rules:
-- Suggest budget hotels under ₹1200 when asked for cheap stays
-- For "best night stop", recommend a hotel around the middle of the journey
-- Keep answers short, friendly, and practical
-- Never invent hotels that are not in the list
+Answer user questions about:
+- best stops
+- budget stays
+- arrival time
+- planning help
+Be concise and helpful.
 `;
 
-
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: question },
-      ],
-      temperature: 0.6,
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+        "HTTP-Referer": "http://localhost:3000",
+        "X-Title": "RouteStay",
+      },
+      body: JSON.stringify({
+        model: "openai/gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: question },
+        ],
+      }),
     });
 
-    const answer = completion.choices[0].message.content;
-    return NextResponse.json({ answer });
-  } catch (e) {
-    // Fallback if AI fails
-    const { question = "", context = {} } = payload || {};
-    const q = question.toLowerCase();
+    const json = await res.json();
 
-    let answer = `You are travelling from ${context.start} to ${context.end}. You can ask me about stops, hotels, or arrival time.`;
-
-    if (q.includes("best") || q.includes("stop")) {
-      answer = "Try looking for a hotel around the middle of your journey for a comfortable night stop.";
-    } else if (q.includes("time") || q.includes("reach")) {
-      answer = `The total journey is about ${context.time} hours for ${context.distance} km.`;
+    if (!res.ok) {
+      console.error(json);
+      return NextResponse.json(
+        { error: "AI service unavailable" },
+        { status: 500 }
+      );
     }
 
+    const answer =
+      json.choices?.[0]?.message?.content ||
+      "I couldn't generate a response.";
+
     return NextResponse.json({ answer });
+  } catch (e) {
+    console.error("Chat error:", e);
+    return NextResponse.json(
+      { error: "Chat failed" },
+      { status: 500 }
+    );
   }
 }
+
