@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import ManualHotel from "@/models/ManualHotel";
 
 const KEY = process.env.GOOGLE_MAPS_KEY;
 
@@ -40,7 +42,7 @@ function decodePolyline(encoded) {
 
 async function geocode(place) {
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-    place
+    place,
   )}&key=${KEY}`;
 
   const res = await fetch(url);
@@ -105,7 +107,7 @@ async function fetchHotels(lat, lng) {
     hotels.push({
       _id: `g-${p.place_id}`,
       name: p.name,
-      price: p.price_level ? p.price_level * 500 : 1000,
+      price: Math.round(p.price_level ? p.price_level * 500 + Math.random() * 1000 : 1000 + Math.random() * 500),
       lat: p.geometry.location.lat,
       lng: p.geometry.location.lng,
       rating: p.rating || 0,
@@ -132,7 +134,7 @@ export async function GET(req) {
     if (!start || !end) {
       return NextResponse.json(
         { error: "Start and End are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -151,10 +153,7 @@ export async function GET(req) {
       const s = steps[idx];
 
       try {
-        const h = await fetchHotels(
-          s.end_location.lat,
-          s.end_location.lng
-        );
+        const h = await fetchHotels(s.end_location.lat, s.end_location.lng);
         hotels.push(...h);
       } catch (e) {
         console.error("Hotel fetch failed:", e.message);
@@ -164,6 +163,65 @@ export async function GET(req) {
     // Deduplicate by place_id
     const unique = {};
     hotels.forEach((h) => {
+      unique[h._id] = h;
+    });
+
+    // ---- Merge Admin Manual Hotels ----
+    await connectDB();
+
+    // Load all manual stays
+    const manual = await ManualHotel.find();
+    console.log("Manual hotels in DB:", manual.length);
+
+    // Helper: check if a point is near the route
+    function isNearRoute(lat, lng, steps, maxKm = 50) {
+      function haversine(a, b, c, d) {
+        const R = 6371;
+        const dLat = ((c - a) * Math.PI) / 180;
+        const dLng = ((d - b) * Math.PI) / 180;
+        const x =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos((a * Math.PI) / 180) *
+            Math.cos((c * Math.PI) / 180) *
+            Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+      }
+
+      for (const s of steps) {
+        const p = s.end_location;
+        const d = haversine(lat, lng, p.lat, p.lng);
+        if (d <= maxKm) return true;
+      }
+      return false;
+    }
+
+    // Keep only manual hotels near this route
+    const manualOnRoute = manual
+      .filter((m) => {
+        const isNear = isNearRoute(m.lat, m.lng, r.steps);
+        console.log(
+          `Hotel ${m.name}: lat=${m.lat}, lng=${m.lng}, isNear=${isNear}`,
+        );
+        return isNear;
+      })
+      .map((m) => ({
+        _id: `m-${m._id}`,
+        name: m.name,
+        price: m.price,
+        lat: m.lat,
+        lng: m.lng,
+        rating: 0,
+        images: m.image ? [m.image] : [],
+        phone: m.phone,
+        type: m.type,
+        source: "manual",
+      }));
+
+    // Merge with Google hotels
+    hotels.push(...manualOnRoute);
+
+    // Add manual hotels to unique dict
+    manualOnRoute.forEach((h) => {
       unique[h._id] = h;
     });
 
@@ -179,5 +237,3 @@ export async function GET(req) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
-
-
