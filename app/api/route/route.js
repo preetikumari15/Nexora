@@ -4,8 +4,6 @@ import ManualHotel from "@/models/ManualHotel";
 
 const KEY = process.env.GOOGLE_MAPS_KEY;
 
-// ---------- Helpers ----------
-
 function decodePolyline(encoded) {
   let index = 0,
     lat = 0,
@@ -37,7 +35,7 @@ function decodePolyline(encoded) {
     coordinates.push([lng / 1e5, lat / 1e5]);
   }
 
-  return coordinates; // [lng, lat]
+  return coordinates; 
 }
 
 async function geocode(place) {

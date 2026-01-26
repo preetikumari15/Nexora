@@ -7,7 +7,6 @@ export async function POST(req) {
   try {
     const { email, password, secret } = await req.json();
 
-    // simple protection so anyone can't create admin
     if (secret !== process.env.ADMIN_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { toast, Bounce } from "react-toastify";
+
 import {
   MapPin,
   Navigation,
@@ -15,7 +17,6 @@ import {
   Send,
 } from "lucide-react";
 
-/* ---------- Best Stop Helpers ---------- */
 function estimateETA(totalHours, index, total) {
   const ratio = index / total;
   const minutes = Math.round(totalHours * 60 * ratio);
@@ -105,7 +106,6 @@ export default function Result() {
     let isMounted = true;
     let map;
 
-    // Cleanup previous map before initializing new one
     if (mapRef.current) {
       try {
         mapRef.current.off();
@@ -136,7 +136,6 @@ export default function Result() {
         const mapContainer = document.getElementById("map");
         if (!mapContainer || !isMounted) return;
 
-        // Check if map already exists in container
         if (mapContainer._leaflet_id) {
           return;
         }
@@ -358,7 +357,18 @@ export default function Result() {
                   alert(json.error || "Failed to save");
                   return;
                 }
-                alert("Trip saved successfully!");
+
+                toast.success("Trip saved successfully!", {
+                  position: "top-center",
+                  autoClose: 3000,
+                  hideProgressBar: false,
+                  closeOnClick: false,
+                  pauseOnHover: true,
+                  draggable: true,
+                  progress: undefined,
+                  theme: "light",
+                  transition: Bounce,
+                });
               }}
               className="w-full flex items-center justify-center gap-2 bg-green-700 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-gray-900/10 hover:bg-green-800 transition-all hover:cursor-pointer"
             >
