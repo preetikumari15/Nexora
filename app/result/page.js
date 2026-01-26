@@ -649,7 +649,17 @@ export default function Result() {
                     }
                     setReviewBox(null);
                     setMyComment("");
-                    alert("Review Submitted!");
+                    toast.success("Review Submitted!", {
+                      position: "top-center",
+                      autoClose: 3000,
+                      hideProgressBar: false,
+                      closeOnClick: false,
+                      pauseOnHover: true,
+                      draggable: true,
+                      progress: undefined,
+                      theme: "light",
+                      transition: Bounce,
+                    });
                   }}
                 >
                   Submit
