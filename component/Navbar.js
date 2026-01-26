@@ -20,6 +20,7 @@ export default function Navbar() {
   function logout() {
     localStorage.removeItem("token");
     localStorage.removeItem("name");
+    localStorage.removeItem("adminToken");
     setUser(null);
     router.push("/");
   }
