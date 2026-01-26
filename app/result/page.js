@@ -1,9 +1,19 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { useSearchParams } from "next/navigation";
-import { useRouter } from "next/navigation";
-
-
+import { useSearchParams, useRouter } from "next/navigation";
+import {
+  MapPin,
+  Navigation,
+  Star,
+  Phone,
+  MessageCircle,
+  Search,
+  Filter,
+  Save,
+  Map as MapIcon,
+  X,
+  Send,
+} from "lucide-react";
 
 /* ---------- Best Stop Helpers ---------- */
 function estimateETA(totalHours, index, total) {
@@ -25,7 +35,7 @@ function getBestStop(hotels, totalHours) {
   });
 
   const evening = enriched.filter(
-    (h) => h._mins >= 18 * 60 && h._mins <= 22 * 60
+    (h) => h._mins >= 18 * 60 && h._mins <= 22 * 60,
   );
 
   if (evening.length) {
@@ -33,35 +43,6 @@ function getBestStop(hotels, totalHours) {
   }
 
   return enriched[Math.floor(enriched.length / 2)];
-}
-
-function buildJourneyPlan(hotels, totalHours) {
-  if (!hotels.length) return [];
-
-  const dailyLimit = 9; // hours per day
-  const days = Math.ceil(totalHours / dailyLimit);
-
-  const sorted = [...hotels];
-  const perDay = Math.floor(sorted.length / days);
-
-  const plan = [];
-
-  for (let d = 0; d < days; d++) {
-    const startIdx = d * perDay;
-    const endIdx = d === days - 1 ? sorted.length : startIdx + perDay;
-    const slice = sorted.slice(startIdx, endIdx);
-
-    const nightStop =
-      slice.sort((a, b) => a.price - b.price)[0] || null;
-
-    plan.push({
-      day: d + 1,
-      drive: Math.min(dailyLimit, totalHours - d * dailyLimit).toFixed(1),
-      stop: nightStop,
-    });
-  }
-
-  return plan;
 }
 
 function getFinalRating(h, reviewData) {
@@ -75,8 +56,7 @@ function getFinalRating(h, reviewData) {
 }
 
 export default function Result() {
-    const router = useRouter();
-
+  const router = useRouter();
   const params = useSearchParams();
   const start = params.get("start");
   const end = params.get("end");
@@ -97,17 +77,14 @@ export default function Result() {
   ]);
   const [question, setQuestion] = useState("");
 
-  // Reviews
-const [reviewBox, setReviewBox] = useState(null); // hotelId
-const [reviewData, setReviewData] = useState({});
-const [myRating, setMyRating] = useState(5);
-const [myComment, setMyComment] = useState("");
+  // Reviews & Plan
+  const [reviewBox, setReviewBox] = useState(null);
+  const [reviewData, setReviewData] = useState({});
+  const [myRating, setMyRating] = useState(5);
+  const [myComment, setMyComment] = useState("");
+  const [planOpen, setPlanOpen] = useState(false);
+  const [journeyPlan, setJourneyPlan] = useState([]);
 
-const [planOpen, setPlanOpen] = useState(false);
-const [journeyPlan, setJourneyPlan] = useState([]);
-
-
-  /* ---------- Fetch Route + Hotels ---------- */
   useEffect(() => {
     if (!start || !end) return;
 
@@ -122,12 +99,10 @@ const [journeyPlan, setJourneyPlan] = useState([]);
       });
   }, [start, end]);
 
-  /* ---------- Map ---------- */
   useEffect(() => {
     if (!data || !data.route || !data.route.length) return;
 
     let map;
-
     (async () => {
       const L = (await import("leaflet")).default;
       await import("leaflet/dist/leaflet.css");
@@ -136,46 +111,52 @@ const [journeyPlan, setJourneyPlan] = useState([]);
       L.Icon.Default.mergeOptions({
         iconRetinaUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl:
-          "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
         shadowUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
       });
 
-      map = L.map("map").setView(
+      if (mapRef.current) {
+        mapRef.current.remove();
+      }
+
+      map = L.map("map", { zoomControl: false }).setView(
         [data.route[0][1], data.route[0][0]],
-        6
+        6,
       );
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap",
-      }).addTo(map);
+      L.control.zoom({ position: "bottomright" }).addTo(map);
+
+      L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+        {
+          attribution: "© OpenStreetMap © CartoDB",
+        },
+      ).addTo(map);
 
       const latLngs = data.route.map(([lng, lat]) => [lat, lng]);
-      const line = L.polyline(latLngs, { color: "blue" }).addTo(map);
-      map.fitBounds(line.getBounds());
+      const line = L.polyline(latLngs, { color: "#ec4899", weight: 4 }).addTo(
+        map,
+      );
+      map.fitBounds(line.getBounds(), { padding: [50, 50] });
 
       const markers = {};
       data.hotels.forEach((h) => {
         if (!h.lat || !h.lng) return;
 
-        const directionsURL = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
-          start
-        )}&destination=${h.lat},${h.lng}&travelmode=driving`;
+        const directionsURL = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(start)}&destination=${h.lat},${h.lng}&travelmode=driving`;
 
-        const m = L.marker([h.lat, h.lng])
-          .addTo(map)
-          .bindPopup(`
-  <div style="font-size:13px">
-    <b>${h.name}</b><br/>
-    ${h.price ? `₹${h.price}` : ""} ${h.rating ? `• ★ ${h.rating}` : ""}<br/>
-    <a href="${directionsURL}" target="_blank" style="color:#2563eb">
-      Get Directions
-    </a>
-  </div>
-`);
-
-
+        const m = L.marker([h.lat, h.lng]).addTo(map).bindPopup(`
+            <div style="font-family: sans-serif; min-width: 150px;">
+              <h3 style="margin:0; font-weight:700; font-size:14px;">${h.name}</h3>
+              <div style="margin-top:4px; font-size:12px; color:#666;">
+                ${h.price ? `₹${h.price}` : "Price N/A"} • ${h.rating ? `★ ${h.rating}` : ""}
+              </div>
+              <a href="${directionsURL}" target="_blank" style="display:block; margin-top:6px; color:#ec4899; text-decoration:none; font-weight:600; font-size:12px;">
+                Get Directions →
+              </a>
+            </div>
+          `);
         markers[h._id] = m;
       });
 
@@ -184,7 +165,7 @@ const [journeyPlan, setJourneyPlan] = useState([]);
     })();
 
     return () => {
-      if (map) map.remove();
+      if (mapRef.current) mapRef.current.remove();
     };
   }, [data]);
 
@@ -193,304 +174,341 @@ const [journeyPlan, setJourneyPlan] = useState([]);
       alert("Geolocation not supported");
       return;
     }
-
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserPos({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         });
+
+        if (mapRef.current)
+          mapRef.current.flyTo([pos.coords.latitude, pos.coords.longitude], 10);
       },
-      () => alert("Unable to fetch your location")
+      () => alert("Unable to fetch your location"),
     );
   }
 
- if (!data || !data.route) {
-  return (
-    <div className="h-screen flex items-center justify-center">
-      Loading route...
-    </div>
-  );
-}
-
+  if (!data || !data.route) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#f8f9fc]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
+        <p className="text-gray-500 font-medium">
+          Finding optimal route...
+        </p>
+      </div>
+    );
+  }
 
   const filteredHotels = data.hotels
     .filter((h) => !maxPrice || h.price <= Number(maxPrice))
     .filter((h) =>
-        !typeFilter ? true : (h.name.toLowerCase().includes(typeFilter) || h.type?.toLowerCase().includes(typeFilter))
+      !typeFilter
+        ? true
+        : h.name.toLowerCase().includes(typeFilter) ||
+          h.type?.toLowerCase().includes(typeFilter),
     )
     .filter((h) => {
       if (!userPos) return true;
 
       const dHotel =
-        Math.abs(h.lat - userPos.lat) +
-        Math.abs(h.lng - userPos.lng);
-
+        Math.abs(h.lat - userPos.lat) + Math.abs(h.lng - userPos.lng);
       const dStart =
         Math.abs(data.route[0][1] - userPos.lat) +
         Math.abs(data.route[0][0] - userPos.lng);
-
       return dHotel > dStart;
     });
 
   const bestStop = getBestStop(filteredHotels, parseFloat(data.time));
 
   return (
-    <div className="grid grid-cols-3 h-screen overflow-hidden">
-      {/* Left: Hotels */}
-      <div className="p-4 overflow-y-auto">
-        <h2 className="font-bold text-lg">
-          {data.start} → {data.end}
-        </h2>
-        <p className="text-sm text-gray-600 mb-2">
-          {data.distance} km · {data.time} hrs
-        </p>
-
-        {typeof window !== "undefined" &&
-  localStorage.getItem("token") && (
-    <button
-      onClick={async () => {
-        const token = localStorage.getItem("token");
-
-        const res = await fetch("/api/trips/save", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            start: data.start,
-            end: data.end,
-            distance: data.distance,
-            time: data.time,
-            bestStop: bestStop
-              ? {
-                  name: bestStop.name,
-                  price: bestStop.price,
-                  eta: bestStop._eta,
-                }
-              : null,
-          }),
-        });
-
-        const json = await res.json();
-        if (!res.ok) {
-          alert(json.error || "Failed to save");
-          return;
-        }
-
-        alert("Trip saved!");
-      }}
-      className="bg-green-600 text-white w-full py-2 rounded mb-3"
-    >
-      Save This Trip
-    </button>
-  )}
+    <div className="flex flex-col md:flex-row h-screen bg-[#f8f9fc] relative overflow-hidden">
+      <div className="w-full md:w-112.5 lg:w-125 flex flex-col h-[60vh] md:h-full bg-white/80 backdrop-blur-md z-10 shadow-2xl relative">
+        <div className="pt-12 pb-4 px-6 border-b border-gray-100 bg-white">
+          <div className="flex items-center gap-2 text-md font-bold text-orange-500 uppercase tracking-widest mb-2">
+            <Navigation size={18} /> Route Details
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 truncate flex items-center gap-2">
+            {data.start} <span className="text-gray-300">→</span> {data.end}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1 flex gap-2 mb-2">
+            <span>🚗 {data.distance} km</span>
+            <span className="w-px h-4 bg-gray-300"></span>
+            <span>⏱️ {data.time} hrs</span>
+          </p>
+        </div>
 
         {/* Filters */}
-        <div className="space-y-2 mb-3">
-          <input
-            className="border p-1 w-full text-sm"
-            placeholder="Max Price (₹)"
-            value={maxPrice}
-            onChange={(e) => setMaxPrice(e.target.value)}
-          />
-
-          <select
-            className="border p-1 w-full text-sm"
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-          >
-            <option value="">All Types</option>
-            <option value="hotel">Hotel</option>
-            <option value="dharamshala">Dharamshala</option>
-            <option value="guest">Guest House</option>
-            <option value="lodge">Lodge</option>
-          </select>
-
-          <button
-            onClick={locateMe}
-            className="border p-1 w-full text-sm bg-gray-100"
-          >
-            📍 Hotels near me 
-          </button>
-
-          {userPos && (
-            <div className="text-xs text-green-600">
-              Showing hotels ahead of your current location
+        <div className="p-4 space-y-3 bg-gray-50/50 border-b border-gray-100">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="number"
+                placeholder="Max Price (₹)"
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-xl py-2 pl-9 pr-3 text-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-200"
+              />
             </div>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-xl py-2 pl-9 pr-3 text-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-200 appearance-none"
+              >
+                <option value="">All Types</option>
+                <option value="hotel">Hotel</option>
+                <option value="dharamshala">Dharamshala</option>
+                <option value="guest">Guest House</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={locateMe}
+              className="flex items-center justify-center gap-2 bg-white border border-blue-300 hover:bg-blue-50 text-gray-700 py-2 px-4 rounded-xl text-sm font-medium transition-colors hover:cursor-pointer"
+            >
+              <MapPin size={14} className="text-blue-500" /> Near Me
+            </button>
+
+            <button
+              onClick={() =>
+                router.push(
+                  `/plan?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+                )
+              }
+              className="flex items-center justify-center gap-2 hover:bg-yellow-100 text-yellow-700 py-2 px-4 rounded-xl text-sm hover: cursor-pointer font-medium transition-colors border border-yellow-400"
+            >
+              <MapIcon size={14} /> Plan Journey
+            </button>
+            {userPos && (
+              <div className="text-xs text-green-600">
+                Showing hotels ahead of your current location
+              </div>
+            )}
+          </div>
+
+          {/* Save Trip Button */}
+          {typeof window !== "undefined" && localStorage.getItem("token") && (
+            <button
+              onClick={async () => {
+                const token = localStorage.getItem("token");
+                const res = await fetch("/api/trips/save", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({
+                    start: data.start,
+                    end: data.end,
+                    distance: data.distance,
+                    time: data.time,
+                    bestStop: bestStop
+                      ? {
+                          name: bestStop.name,
+                          price: bestStop.price,
+                          eta: bestStop._eta,
+                        }
+                      : null,
+                  }),
+                });
+                const json = await res.json();
+                if (!res.ok) {
+                  alert(json.error || "Failed to save");
+                  return;
+                }
+                alert("Trip saved successfully!");
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-green-700 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-gray-900/10 hover:bg-green-800 transition-all hover:cursor-pointer"
+            >
+              <Save size={14} /> Save This Trip
+            </button>
           )}
         </div>
 
-      <button
-  onClick={() => {
-    router.push(
-      `/plan?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
-    );
-  }}
-  className="border p-2 w-full text-sm bg-blue-50 text-blue-700 mb-3"
->
-  🧭 Plan My Whole Journey
-</button>
-
-
-
-
-        {/* Best Stop */}
-        {bestStop && (
-          <div className="border-2 border-yellow-400 bg-yellow-50 p-2 rounded mb-3">
-            <div className="text-xs font-semibold text-yellow-700">
-              ⭐ Recommended Night Stop
-            </div>
-            <div className="font-bold">{bestStop.name}</div>
-            <div className="text-xs">
-              Reach around {bestStop._eta} · ₹{bestStop.price}
-            </div>
-          </div>
-        )}
-
-        {/* Hotels */}
-        <div className="space-y-2">
-          {filteredHotels.map((h) => (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Recommended Stop */}
+          {bestStop && (
             <div
-              key={h._id}
-              className="border p-2 rounded cursor-pointer"
+              className="bg-linear-to-br from-yellow-50 to-orange-50 border border-yellow-200 rounded-2xl p-4 shadow-sm relative overflow-hidden group cursor-pointer"
               onClick={() => {
-                const m = markersRef.current[h._id];
+                const m = markersRef.current[bestStop._id];
                 if (m && mapRef.current) {
-                  const { lat, lng } = m.getLatLng();
-                  mapRef.current.setView([lat, lng], 14);
+                  mapRef.current.setView(m.getLatLng(), 14);
                   m.openPopup();
                 }
               }}
             >
-              {h.images?.[0] && (
-                <img
-                  src={h.images[0]}
-                  alt={h.name}
-                  className="w-full h-24 object-cover rounded mb-1"
-                />
-              )}
-
-              <b>{h.name}</b>
-      {(() => {
-  const finalRating = getFinalRating(h, reviewData);
-  return (
-    <div className="text-sm text-gray-800">
-      {h.price ? `₹${h.price}` : ""}
-      {finalRating && (
-        <span className="text-yellow-600">
-          {h.price ? " • " : ""}
-          ★ {finalRating}
-        </span>
-      )}
-    </div>
-  );
-})()}
-
-
-<div className="flex gap-2 text-xs mt-1">
-
-  <button
-    className="text-green-600"
-    onClick={(e) => {
-      e.stopPropagation();
-      if (!localStorage.getItem("token")) {
-        alert("Login to add review");
-        return;
-      }
-      setReviewBox(h._id);
-    }}
-  >
-    Add Review
-  </button>
-</div>
-
-              
-
-              <div className="flex gap-3 text-xs">
-                {h.phone && (
-                  <a
-                    href={`tel:${h.phone}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-green-600"
-                  >
-                    Call
-                  </a>
-                )}
-
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
-                    start
-                  )}&destination=${h.lat},${h.lng}&travelmode=driving`}
-                  target="_blank"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-blue-600"
-                >
-                  Directions
-                </a>
+              <div className="absolute top-0 right-0 bg-yellow-400 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg shadow-sm">
+                RECOMMENDED
               </div>
+              <h3 className="font-bold text-gray-900 pr-12">{bestStop.name}</h3>
+              <p className="text-xs text-yellow-800 font-medium mt-1">
+                Reach around {bestStop._eta} · ₹{bestStop.price}
+              </p>
             </div>
-          ))}
+          )}
+
+          {/* List */}
+          {filteredHotels.map((h) => {
+            const finalRating = getFinalRating(h, reviewData);
+            return (
+              <div
+                key={h._id}
+                className="bg-white border border-gray-100 rounded-2xl p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group flex gap-4"
+                onClick={() => {
+                  const m = markersRef.current[h._id];
+                  if (m && mapRef.current) {
+                    mapRef.current.setView(m.getLatLng(), 14);
+                    m.openPopup();
+                  }
+                }}
+              >
+                <div className="w-24 h-24 shrink-0 bg-gray-100 rounded-xl overflow-hidden">
+                  {h.images?.[0] ? (
+                    <img
+                      src={h.images[0]}
+                      alt={h.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-300">
+                      <MapPin size={24} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 flex flex-col justify-between py-1">
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-sm leading-tight">
+                      {h.name}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-sm font-semibold text-gray-600">
+                        ₹{h.price || "N/A"}
+                      </span>
+                      {finalRating && (
+                        <span className="flex items-center gap-1 text-xs font-bold text-yellow-500 bg-yellow-50 px-1.5 py-0.5 rounded">
+                          <Star size={12} fill="currentColor" /> {finalRating}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 mt-2 border-t border-gray-50 pt-2">
+                    {h.phone && (
+                      <a
+                        href={`tel:${h.phone}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-green-600 hover:text-green-500 transition-colors"
+                      >
+                        <Phone size={16} />
+                      </a>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(
+                          `https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}`,
+                        );
+                      }}
+                      className="text-blue-600 hover:text-blue-400 transition-colors"
+                    >
+                      <Navigation size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!localStorage.getItem("token"))
+                          return alert("Login to review");
+                        setReviewBox(h._id);
+                      }}
+                      className="text-gray-400 hover:text-orange-500 transition-colors ml-auto text-xs font-medium"
+                    >
+                      Add Review
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Right: Map */}
-      <div id="map" className="col-span-2 h-full" />
+      {/* --- Map Section --- */}
+      <div className="flex-1 h-[40vh] md:h-full order-first md:order-last bg-gray-200 relative">
+        <div id="map" className="w-full h-full z-0" />
+      </div>
 
-      {/* Chat */}
+      {/* --- Chat --- */}
       <button
         onClick={() => setChatOpen(!chatOpen)}
-        className="fixed bottom-6 right-6 w-12 h-12 rounded-full bg-black text-white flex items-center justify-center shadow-lg z-999"
+        className="fixed bottom-6 right-11 w-16 h-16 bg-green-600 text-white rounded-full shadow-2xl hover:scale-105 transition-transform flex items-center justify-center z-50 group"
       >
-        💬
+        {chatOpen ? (
+          <X size={24} />
+        ) : (
+          <MessageCircle
+            size={30}
+            className="group-hover:animate-pulse hover:cursor-pointer"
+          />
+        )}
       </button>
 
+      {/* Chat Window */}
       {chatOpen && (
-        <div className="fixed bottom-20 right-6 w-80 bg-white border rounded shadow-lg z-999 flex flex-col">
-          <div className="p-2 border-b font-semibold text-sm flex justify-between">
-            Travel Assistant
-            <button onClick={() => setChatOpen(false)}>✕</button>
+        <div className="fixed bottom-24 right-6 w-80 md:w-96 bg-white rounded-3xl shadow-2xl border border-gray-100 z-50 overflow-hidden flex flex-col animate-in slide-in-from-bottom-5">
+          <div className="bg-gray-900 text-white p-4 flex justify-between items-center">
+            <span className="font-bold text-sm">Nexora Assistant</span>
+            <button
+              onClick={() => setChatOpen(false)}
+              className="text-white/60 hover:text-white"
+            >
+              <X size={16} />
+            </button>
           </div>
 
-          <div className="h-60 overflow-y-auto p-3 space-y-2 text-sm">
+          <div className="h-80 overflow-y-auto p-4 space-y-3 bg-gray-50">
             {messages.map((m, i) => (
               <div
                 key={i}
-                className={`p-2 rounded ${
-                  m.role === "user"
-                    ? "bg-blue-100 text-right"
-                    : "bg-gray-100"
-                }`}
+                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                {m.text}
+                <div
+                  className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+                    m.role === "user"
+                      ? "bg-gray-900 text-white rounded-br-none"
+                      : "bg-white border border-gray-200 text-gray-700 rounded-bl-none shadow-sm"
+                  }`}
+                >
+                  {m.text}
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="flex gap-1 p-2 border-t">
+          <div className="p-3 bg-white border-t border-gray-100 flex gap-2">
             <input
-              className="border p-1 flex-1 text-sm"
-              placeholder="Ask..."
+              className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-gray-300"
+              placeholder="Ask about your route..."
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
+                if (e.key === "Enter")
                   document.getElementById("send-btn")?.click();
-                }
               }}
             />
             <button
               id="send-btn"
-              className="bg-black text-white px-2 text-sm"
+              className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-full transition-colors"
               onClick={async () => {
                 if (!question || !data) return;
-
                 setMessages((p) => [...p, { role: "user", text: question }]);
                 const q = question;
                 setQuestion("");
-
                 const res = await fetch("/api/chat", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
@@ -509,111 +527,90 @@ const [journeyPlan, setJourneyPlan] = useState([]);
                     },
                   }),
                 });
-
                 const json = await res.json();
                 setMessages((p) => [...p, { role: "ai", text: json.answer }]);
               }}
             >
-              Send
+              <Send size={16} />
             </button>
           </div>
         </div>
       )}
+
+      {/* Review Modal */}
       {reviewBox && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-9999">
-    <div className="bg-white p-4 rounded w-80 space-y-2">
-      <h3 className="font-bold">Add Review</h3>
-
-      <select
-        className="border p-1 w-full"
-        value={myRating}
-        onChange={(e) => setMyRating(Number(e.target.value))}
-      >
-        {[5, 4, 3, 2, 1].map((n) => (
-          <option key={n} value={n}>
-            {n} Stars
-          </option>
-        ))}
-      </select>
-
-      <textarea
-        className="border p-2 w-full"
-        placeholder="Your experience..."
-        value={myComment}
-        onChange={(e) => setMyComment(e.target.value)}
-      />
-
-      <div className="flex gap-2">
-        <button
-          className="bg-black text-white px-3 py-1"
-          onClick={async () => {
-            const token = localStorage.getItem("token");
-
-            const res = await fetch("/api/reviews/add", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                hotelId: reviewBox,
-                rating: myRating,
-                comment: myComment,
-              }),
-            });
-
-            if (!res.ok) {
-              const err = await res.json();
-              alert(err.error || "Failed to submit review");
-              return;
-            }
-
-            const id = reviewBox;
-            setReviewBox(null);
-            setMyComment("");
-            loadReviews(id);
-          }}
-        >
-          Submit
-        </button>
-
-        <button className="text-sm" onClick={() => setReviewBox(null)}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-{planOpen && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-9999">
-    <div className="bg-white p-4 rounded w-90 space-y-3">
-      <div className="flex justify-between items-center">
-        <h3 className="font-bold">Your Journey Plan</h3>
-        <button onClick={() => setPlanOpen(false)}>✕</button>
-      </div>
-
-      {journeyPlan.map((d) => (
-        <div key={d.day} className="border p-2 rounded text-sm">
-          <div className="font-semibold">Day {d.day}</div>
-          <div className="text-gray-600">Drive: {d.drive} hrs</div>
-
-          {d.stop ? (
-            <div className="mt-1">
-              Night Stop: <b>{d.stop.name}</b> (₹{d.stop.price})
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-4xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95">
+            <h3 className="font-bold text-xl mb-4">Add Review</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">
+                  Rating
+                </label>
+                <div className="flex gap-2 mt-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setMyRating(n)}
+                      className={`p-2 rounded-lg ${myRating >= n ? "text-yellow-500 bg-yellow-50" : "text-gray-300 bg-gray-50"}`}
+                    >
+                      <Star size={20} fill="currentColor" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase">
+                  Comment
+                </label>
+                <textarea
+                  className="w-full mt-1 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:border-orange-500"
+                  rows={3}
+                  placeholder="How was your stay?"
+                  value={myComment}
+                  onChange={(e) => setMyComment(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setReviewBox(null)}
+                  className="flex-1 py-3 rounded-xl border border-gray-200 font-semibold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="flex-1 py-3 rounded-xl bg-gray-900 text-white font-bold hover:bg-black"
+                  onClick={async () => {
+                    const token = localStorage.getItem("token");
+                    const res = await fetch("/api/reviews/add", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({
+                        hotelId: reviewBox,
+                        rating: myRating,
+                        comment: myComment,
+                      }),
+                    });
+                    if (!res.ok) {
+                      const err = await res.json();
+                      alert(err.error || "Failed");
+                      return;
+                    }
+                    setReviewBox(null);
+                    setMyComment("");
+                    alert("Review Submitted!");
+                  }}
+                >
+                  Submit
+                </button>
+              </div>
             </div>
-          ) : (
-            <div className="mt-1 text-green-600">
-              Destination reached
-            </div>
-          )}
+          </div>
         </div>
-      ))}
-    </div>
-  </div>
-)}
-
+      )}
     </div>
   );
 }
-
-
