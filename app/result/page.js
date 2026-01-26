@@ -102,70 +102,110 @@ export default function Result() {
   useEffect(() => {
     if (!data || !data.route || !data.route.length) return;
 
+    let isMounted = true;
     let map;
-    (async () => {
-      const L = (await import("leaflet")).default;
-      await import("leaflet/dist/leaflet.css");
 
-      delete L.Icon.Default.prototype._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl:
-          "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl:
-          "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
-
-      if (mapRef.current) {
+    // Cleanup previous map before initializing new one
+    if (mapRef.current) {
+      try {
+        mapRef.current.off();
         mapRef.current.remove();
+      } catch (e) {
+        console.error("Error removing previous map:", e);
       }
+      mapRef.current = null;
+    }
 
-      map = L.map("map", { zoomControl: false }).setView(
-        [data.route[0][1], data.route[0][0]],
-        6,
-      );
+    (async () => {
+      try {
+        const L = (await import("leaflet")).default;
+        await import("leaflet/dist/leaflet.css");
 
-      L.control.zoom({ position: "bottomright" }).addTo(map);
+        if (!isMounted) return;
 
-      L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-        {
-          attribution: "© OpenStreetMap © CartoDB",
-        },
-      ).addTo(map);
+        delete L.Icon.Default.prototype._getIconUrl;
+        L.Icon.Default.mergeOptions({
+          iconRetinaUrl:
+            "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+          iconUrl:
+            "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+          shadowUrl:
+            "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        });
 
-      const latLngs = data.route.map(([lng, lat]) => [lat, lng]);
-      const line = L.polyline(latLngs, { color: "#ec4899", weight: 4 }).addTo(
-        map,
-      );
-      map.fitBounds(line.getBounds(), { padding: [50, 50] });
+        const mapContainer = document.getElementById("map");
+        if (!mapContainer || !isMounted) return;
 
-      const markers = {};
-      data.hotels.forEach((h) => {
-        if (!h.lat || !h.lng) return;
+        // Check if map already exists in container
+        if (mapContainer._leaflet_id) {
+          return;
+        }
 
-        const directionsURL = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(start)}&destination=${h.lat},${h.lng}&travelmode=driving`;
+        map = L.map("map", { zoomControl: false }).setView(
+          [data.route[0][1], data.route[0][0]],
+          6,
+        );
 
-        const m = L.marker([h.lat, h.lng]).addTo(map).bindPopup(`
-            <div style="font-family: sans-serif; min-width: 150px;">
-              <h3 style="margin:0; font-weight:700; font-size:14px;">${h.name}</h3>
-              <div style="margin-top:4px; font-size:12px; color:#666;">
-                ${h.price ? `₹${h.price}` : "Price N/A"} • ${h.rating ? `★ ${h.rating}` : ""}
+        if (!isMounted) {
+          map.remove();
+          return;
+        }
+
+        L.control.zoom({ position: "bottomright" }).addTo(map);
+
+        L.tileLayer(
+          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          {
+            attribution: "© OpenStreetMap © CartoDB",
+          },
+        ).addTo(map);
+
+        const latLngs = data.route.map(([lng, lat]) => [lat, lng]);
+        const line = L.polyline(latLngs, { color: "#ec4899", weight: 4 }).addTo(
+          map,
+        );
+        map.fitBounds(line.getBounds(), { padding: [50, 50] });
+
+        const markers = {};
+        data.hotels.forEach((h) => {
+          if (!h.lat || !h.lng) return;
+
+          const directionsURL = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(start)}&destination=${h.lat},${h.lng}&travelmode=driving`;
+
+          const m = L.marker([h.lat, h.lng]).addTo(map).bindPopup(`
+              <div style="font-family: sans-serif; min-width: 150px;">
+                <h3 style="margin:0; font-weight:700; font-size:14px;">${h.name}</h3>
+                <div style="margin-top:4px; font-size:12px; color:#666;">
+                  ${h.price ? `₹${h.price}` : "Price N/A"} • ${h.rating ? `★ ${h.rating}` : ""}
+                </div>
+                <a href="${directionsURL}" target="_blank" style="display:block; margin-top:6px; color:#ec4899; text-decoration:none; font-weight:600; font-size:12px;">
+                  Get Directions →
+                </a>
               </div>
-              <a href="${directionsURL}" target="_blank" style="display:block; margin-top:6px; color:#ec4899; text-decoration:none; font-weight:600; font-size:12px;">
-                Get Directions →
-              </a>
-            </div>
-          `);
-        markers[h._id] = m;
-      });
+            `);
+          markers[h._id] = m;
+        });
 
-      mapRef.current = map;
-      markersRef.current = markers;
+        if (isMounted) {
+          mapRef.current = map;
+          markersRef.current = markers;
+        }
+      } catch (error) {
+        console.error("Error initializing map:", error);
+      }
     })();
 
     return () => {
-      if (mapRef.current) mapRef.current.remove();
+      isMounted = false;
+      if (mapRef.current) {
+        try {
+          mapRef.current.off();
+          mapRef.current.remove();
+        } catch (e) {
+          console.error("Error cleaning up map:", e);
+        }
+        mapRef.current = null;
+      }
     };
   }, [data]);
 
@@ -192,9 +232,7 @@ export default function Result() {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-[#f8f9fc]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
-        <p className="text-gray-500 font-medium">
-          Finding optimal route...
-        </p>
+        <p className="text-gray-500 font-medium">Finding optimal route...</p>
       </div>
     );
   }
