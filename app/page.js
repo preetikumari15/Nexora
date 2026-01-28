@@ -41,8 +41,7 @@ export default function Home() {
               </span>
             </h1>
             <p className="text-gray-500 text-lg max-w-md leading-relaxed mb-8">
-              We power the backbone of travel ecosystems with state-of-the-art
-              booking services, safe routes & curated hotels.
+              Discover the perfect hotels, dharamshalas, and rest stops along your entire route, not just at the destination.
             </p>
 
             <button
