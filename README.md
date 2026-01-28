@@ -29,5 +29,4 @@ Nexora is a full-stack travel planning web app that helps users plan road journe
 
 ---
 
-## 📁 Project Structure
 
