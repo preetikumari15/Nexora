@@ -33,7 +33,7 @@ export default function Signup() {
 
       localStorage.setItem("token", json.token);
       localStorage.setItem("name", json.name);
-      router.push("/");
+      router.push("/login");
     } catch (err) {
       setError("Something went wrong. Please try again.");
       setLoading(false);
