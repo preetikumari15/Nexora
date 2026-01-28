@@ -2,236 +2,227 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import ManualHotel from "@/models/ManualHotel";
 
-const KEY = process.env.GOOGLE_MAPS_KEY;
+const ORS = process.env.ORS_KEY;
 
-function decodePolyline(encoded) {
-  let index = 0,
-    lat = 0,
-    lng = 0,
-    coordinates = [];
+const HOTEL_IMAGES = [
+  "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=600&q=80",
+  "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=600&q=80",
+  "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=600&q=80",
+  "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=600&q=80",
+  "https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=600&q=80",
+  "https://images.unsplash.com/photo-1584132967334-10e028bd69f7?auto=format&fit=crop&w=600&q=80",
+];
 
-  while (index < encoded.length) {
-    let b,
-      shift = 0,
-      result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
-    lat += dlat;
-
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
-    lng += dlng;
-
-    coordinates.push([lng / 1e5, lat / 1e5]);
+function getMockImage(id) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
   }
-
-  return coordinates; 
+  const index = Math.abs(hash) % HOTEL_IMAGES.length;
+  return HOTEL_IMAGES[index];
 }
 
+function getMockRating(id) {
+  const num = parseInt(id.replace(/\D/g, "") || "0");
+  const decimal = (num % 15) / 10;
+  return (3.5 + decimal).toFixed(1);
+}
+
+function getMockPrice(id) {
+  const num = parseInt(id.replace(/\D/g, "") || "0");
+  return 800 + (num % 32) * 100;
+}
+
+function isNearRoute(hotelLat, hotelLng, routeCoords) {
+  const THRESHOLD = 0.3;
+
+  for (let i = 0; i < routeCoords.length; i += 20) {
+    const [rLng, rLat] = routeCoords[i];
+    const dLat = Math.abs(hotelLat - rLat);
+    const dLng = Math.abs(hotelLng - rLng);
+    if (dLat + dLng < THRESHOLD) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* ----- Geocode using OpenStreetMap ------ */
 async function geocode(place) {
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
     place,
-  )}&key=${KEY}`;
-
-  const res = await fetch(url);
+  )}&limit=1`;
+  const res = await fetch(url, { headers: { "User-Agent": "Nexora/1.0" } });
   const json = await res.json();
-
-  if (json.status !== "OK") {
-    throw new Error(`Geocoding failed: ${json.status}`);
-  }
-
-  const loc = json.results[0].geometry.location;
-  return { lat: loc.lat, lng: loc.lng };
+  if (!json.length) throw new Error(`Place not found: ${place}`);
+  return { lat: parseFloat(json[0].lat), lng: parseFloat(json[0].lon) };
 }
 
+/* ------ Route using OpenRouteService ------- */
 async function getRoute(a, b) {
-  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${a.lat},${a.lng}&destination=${b.lat},${b.lng}&key=${KEY}`;
+  if (!ORS) throw new Error("ORS_KEY missing");
+  const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS}&start=${a.lng},${a.lat}&end=${b.lng},${b.lat}`;
   const res = await fetch(url);
   const json = await res.json();
 
-  if (json.status !== "OK" || !json.routes.length) {
-    throw new Error(`Directions failed: ${json.status}`);
-  }
+  if (!json.features?.length)
+    return { coords: [], distance: 0, time: 0, zero: true };
 
-  const r = json.routes[0];
-
+  const f = json.features[0];
   return {
-    distance: (r.legs[0].distance.value / 1000).toFixed(1),
-    time: (r.legs[0].duration.value / 3600).toFixed(1),
-    route: decodePolyline(r.overview_polyline.points),
-    steps: r.legs[0].steps,
+    coords: f.geometry.coordinates,
+    distance: (f.properties.summary.distance / 1000).toFixed(1),
+    time: (f.properties.summary.duration / 3600).toFixed(1),
+    zero: false,
   };
 }
 
-async function fetchPhone(placeId) {
-  const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_phone_number&key=${KEY}`;
-  const res = await fetch(url);
-  const json = await res.json();
+async function fetchHotelsAlongRoute(routeCoords) {
+  if (!routeCoords || routeCoords.length === 0) return [];
 
-  if (json.status === "OK") {
-    return json.result.formatted_phone_number || null;
-  }
-  return null;
-}
+  try {
+    const samplePoints = [];
+    const steps = 12;
+    const gap = Math.floor(routeCoords.length / steps);
 
-async function fetchHotels(lat, lng) {
-  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=5000&type=lodging&key=${KEY}`;
-  const res = await fetch(url);
-  const json = await res.json();
+    for (let i = 0; i < steps; i++) {
+      const idx = i * gap;
+      const point = routeCoords[idx];
+      if (point) {
+        samplePoints.push({ lat: point[1], lng: point[0] });
+      }
+    }
+    const endPoint = routeCoords[routeCoords.length - 1];
+    if (endPoint) samplePoints.push({ lat: endPoint[1], lng: endPoint[0] });
 
-  if (json.status !== "OK" && json.status !== "ZERO_RESULTS") {
-    throw new Error(`Places failed: ${json.status}`);
-  }
+    let queryStatements = "";
+    const RADIUS = 15000;
 
-  const results = json.results || [];
-  const hotels = [];
-
-  for (const p of results) {
-    let phone = null;
-    try {
-      phone = await fetchPhone(p.place_id);
-    } catch {}
-
-    hotels.push({
-      _id: `g-${p.place_id}`,
-      name: p.name,
-      price: Math.round(p.price_level ? p.price_level * 500 + Math.random() * 1000 : 1000 + Math.random() * 500),
-      lat: p.geometry.location.lat,
-      lng: p.geometry.location.lng,
-      rating: p.rating || 0,
-      phone,
-      images: p.photos
-        ? [
-            `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${p.photos[0].photo_reference}&key=${KEY}`,
-          ]
-        : [],
+    samplePoints.forEach((p) => {
+      queryStatements += `
+        node["tourism"~"hotel|guest_house"](around:${RADIUS}, ${p.lat}, ${p.lng});
+      `;
     });
+
+    const query = `
+      [out:json][timeout:25];
+      (
+        ${queryStatements}
+      );
+      out body;
+    `;
+
+    const res = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      body: query,
+      headers: { "Content-Type": "text/plain" },
+    });
+
+    const text = await res.text();
+    if (!text || !text.trim().startsWith("{")) return [];
+    const json = JSON.parse(text);
+
+    return (json.elements || [])
+      .map((e) => {
+        if (!e.tags?.name) return null;
+        const osmId = `osm-${e.id}`;
+        return {
+          _id: osmId,
+          name: e.tags.name,
+          lat: e.lat,
+          lng: e.lon,
+          type: e.tags?.tourism || "stay",
+          phone: e.tags?.phone || "+91 98765 43210",
+          source: "osm",
+          price: getMockPrice(osmId),
+          rating: getMockRating(osmId),
+          images: [getMockImage(osmId)],
+        };
+      })
+      .filter((h) => h !== null);
+  } catch (e) {
+    console.error("OSM Batch Fetch Failed:", e.message);
+    return [];
   }
-
-  return hotels;
 }
-
-// ---------- API ----------
 
 export async function GET(req) {
   try {
+    await connectDB();
     const { searchParams } = new URL(req.url);
     const start = searchParams.get("start");
     const end = searchParams.get("end");
 
-    if (!start || !end) {
+    if (!start || !end)
       return NextResponse.json(
-        { error: "Start and End are required" },
+        { error: "Start and end required" },
         { status: 400 },
       );
-    }
 
     const a = await geocode(start);
     const b = await geocode(end);
+    const route = await getRoute(a, b);
 
-    const r = await getRoute(a, b);
+    /* ----- Manual hotels ----- */
+    const manual = await ManualHotel.find().lean();
+    const manualHotels = manual
+      .map((h) => {
+        const idStr = h._id.toString();
 
-    // Spread samples along the whole route
-    const hotels = [];
-    const steps = r.steps;
-    const sampleCount = Math.min(8, steps.length);
+        let dbImages = [];
+        if (Array.isArray(h.images) && h.images.length > 0) {
+          dbImages = h.images;
+        } else if (
+          h.image &&
+          typeof h.image === "string" &&
+          h.image.length > 5
+        ) {
+          dbImages = [h.image];
+        }
+        dbImages = dbImages.filter((img) => img && img.trim() !== "");
+        if (dbImages.length === 0) dbImages = [getMockImage(idStr)];
 
-    for (let i = 0; i < sampleCount; i++) {
-      const idx = Math.floor((i / sampleCount) * steps.length);
-      const s = steps[idx];
-
-      try {
-        const h = await fetchHotels(s.end_location.lat, s.end_location.lng);
-        hotels.push(...h);
-      } catch (e) {
-        console.error("Hotel fetch failed:", e.message);
-      }
-    }
-
-    // Deduplicate by place_id
-    const unique = {};
-    hotels.forEach((h) => {
-      unique[h._id] = h;
-    });
-
-    // ---- Merge Admin Manual Hotels ----
-    await connectDB();
-
-    // Load all manual stays
-    const manual = await ManualHotel.find();
-    console.log("Manual hotels in DB:", manual.length);
-
-    // Helper: check if a point is near the route
-    function isNearRoute(lat, lng, steps, maxKm = 50) {
-      function haversine(a, b, c, d) {
-        const R = 6371;
-        const dLat = ((c - a) * Math.PI) / 180;
-        const dLng = ((d - b) * Math.PI) / 180;
-        const x =
-          Math.sin(dLat / 2) ** 2 +
-          Math.cos((a * Math.PI) / 180) *
-            Math.cos((c * Math.PI) / 180) *
-            Math.sin(dLng / 2) ** 2;
-        return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-      }
-
-      for (const s of steps) {
-        const p = s.end_location;
-        const d = haversine(lat, lng, p.lat, p.lng);
-        if (d <= maxKm) return true;
-      }
-      return false;
-    }
-
-    // Keep only manual hotels near this route
-    const manualOnRoute = manual
-      .filter((m) => {
-        const isNear = isNearRoute(m.lat, m.lng, r.steps);
-        console.log(
-          `Hotel ${m.name}: lat=${m.lat}, lng=${m.lng}, isNear=${isNear}`,
-        );
-        return isNear;
+        return {
+          _id: idStr,
+          name: h.name,
+          lat: h.lat,
+          lng: h.lng,
+          price: h.price || 999,
+          type: h.type || "stay",
+          phone: h.phone || "+91 98765 43210",
+          images: dbImages,
+          rating: h.rating || 4.5,
+          source: "manual",
+        };
       })
-      .map((m) => ({
-        _id: `m-${m._id}`,
-        name: m.name,
-        price: m.price,
-        lat: m.lat,
-        lng: m.lng,
-        rating: 0,
-        images: m.image ? [m.image] : [],
-        phone: m.phone,
-        type: m.type,
-        source: "manual",
-      }));
 
-    // Merge with Google hotels
-    hotels.push(...manualOnRoute);
+      .filter((h) => isNearRoute(h.lat, h.lng, route.coords));
 
-    // Add manual hotels to unique dict
-    manualOnRoute.forEach((h) => {
-      unique[h._id] = h;
+    let osmHotels = [];
+    if (route.coords.length > 0) {
+      osmHotels = await fetchHotelsAlongRoute(route.coords);
+    }
+
+    const seen = new Set();
+    const allHotels = [...manualHotels, ...osmHotels];
+
+    const hotels = allHotels.filter((h) => {
+      if (seen.has(h._id)) return false;
+      seen.add(h._id);
+      return true;
     });
 
     return NextResponse.json({
       start,
       end,
-      distance: r.distance,
-      time: r.time,
-      route: r.route,
-      hotels: Object.values(unique),
+      route: route.coords,
+      distance: route.distance,
+      time: route.time,
+      zero: route.zero,
+      hotels: hotels.slice(0, 70),
     });
   } catch (e) {
+    console.error("Route API error:", e.message);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

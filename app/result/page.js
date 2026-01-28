@@ -48,7 +48,7 @@ function getBestStop(hotels, totalHours) {
 
 function getFinalRating(h, reviewData) {
   const manual = reviewData[h._id]?.avg || 0;
-  const google = h.rating || 0;
+  const google = Number(h.rating) || 0; 
 
   if (manual && google) return ((manual + google) / 2).toFixed(1);
   if (manual) return manual.toFixed(1);
@@ -494,7 +494,7 @@ export default function Result() {
       {/* --- Chat --- */}
       <button
         onClick={() => setChatOpen(!chatOpen)}
-        className="fixed bottom-6 right-11 w-16 h-16 bg-green-600 text-white rounded-full shadow-2xl hover:scale-105 transition-transform flex items-center justify-center z-50 group"
+        className="fixed bottom-6 right-11 w-16 h-16 bg-green-600 text-white rounded-full shadow-2xl hover:scale-105 transition-transform flex items-center justify-center z-10 group"
       >
         {chatOpen ? (
           <X size={24} />
@@ -504,7 +504,13 @@ export default function Result() {
             className="group-hover:animate-pulse hover:cursor-pointer"
           />
         )}
+        
       </button>
+      {!chatOpen && (
+           <div className="absolute bottom-18 right-20 bg-white px-4 py-2 rounded-2xl rounded-br-none shadow-xl animate-bounce border border-green-800 whitespace-nowrap z-60">
+             <span className="text-sm font-bold text-green-800">Hii👋</span>
+           </div>
+        )}
 
       {/* Chat Window */}
       {chatOpen && (
