@@ -258,7 +258,7 @@ export default function Result() {
   const bestStop = getBestStop(filteredHotels, parseFloat(data.time));
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-[#f8f9fc] relative overflow-hidden">
+    <div className="flex flex-col md:flex-row h-screen bg-[#f8f9fc] relative overflow-hidden pt-20 md:pt-0">
       <div className="w-full md:w-112.5 lg:w-125 flex flex-col h-[60vh] md:h-full bg-white/80 backdrop-blur-md z-10 shadow-2xl relative">
         <div className="pt-12 pb-4 px-6 border-b border-gray-100 bg-white">
           <div className="flex items-center gap-2 text-md font-bold text-orange-500 uppercase tracking-widest mb-2">
@@ -507,7 +507,7 @@ export default function Result() {
         
       </button>
       {!chatOpen && (
-           <div className="absolute bottom-18 right-20 bg-white px-4 py-2 rounded-2xl rounded-br-none shadow-xl animate-bounce border border-green-800 whitespace-nowrap z-60">
+           <div className="fixed bottom-18 right-20 bg-white px-4 py-2 rounded-2xl rounded-br-none shadow-xl animate-bounce border border-green-800 whitespace-nowrap z-60">
              <span className="text-sm font-bold text-green-800">Hii👋</span>
            </div>
         )}
