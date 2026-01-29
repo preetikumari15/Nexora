@@ -83,7 +83,7 @@ export default function PlanPage() {
         <div className="absolute bottom-[-10%] right-[-5%] w-125 h-125 bg-orange-100 rounded-full blur-[100px] opacity-60" />
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 pt-20 pb-12 sm:pt-30 sm:pb-20">
+      <div className="max-w-4xl mx-auto px-6 md:pt-28 md:pb-12 pt-28 pb-6">
         {/* --- Navigation --- */}
         <button
           onClick={() => router.back()}

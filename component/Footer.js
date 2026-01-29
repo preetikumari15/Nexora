@@ -3,7 +3,7 @@ import { Zap } from "lucide-react";
 
 const Footer = () => {
   return (
-    <footer className="bg-white border-t border-pink-200 pt-6 pb-2 shadow-pink-300">
+    <footer className="bg-white border-t border-pink-200 md:pt-6 md:pb-2 pt-3 pb-1 shadow-pink-300">
       <div className="max-w-5xl mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6">
           <div className="flex flex-col items-center md:items-start gap-2">

@@ -260,11 +260,11 @@ export default function Result() {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#f8f9fc] relative overflow-hidden pt-20 md:pt-0">
       <div className="w-full md:w-112.5 lg:w-125 flex flex-col h-[60vh] md:h-full bg-white/80 backdrop-blur-md z-10 shadow-2xl relative">
-        <div className="pt-12 pb-4 px-6 border-b border-gray-100 bg-white">
-          <div className="flex items-center gap-2 text-md font-bold text-orange-500 uppercase tracking-widest mb-2">
+        <div className="md:pt-15 md:pb-5 px-6 pt-6 pb-1 border-b border-gray-100 bg-white">
+          <div className="flex items-center gap-2 text-md font-bold text-orange-500 uppercase tracking-widest mb-3">
             <Navigation size={18} /> Route Details
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 truncate flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 truncate flex items-center gap-2 mb-2">
             {data.start} <span className="text-gray-300">→</span> {data.end}
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex gap-2 mb-2">
